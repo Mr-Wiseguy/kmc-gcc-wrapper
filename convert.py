@@ -2,6 +2,15 @@
 import coff
 import sys
 from capstone import *
+import argparse
+
+progname = 'kmc-translate'
+
+parser = argparse.ArgumentParser(prog=progname, description='Translates a kmc gcc binary to 32-bit linux')
+parser.add_argument('bin', help='The kmc gcc binary to convert')
+parser.add_argument('--output', '-o', type=argparse.FileType('w'), default=sys.stdout, help='The file to write the generated assembly to')
+
+args = parser.parse_args()
 
 md = Cs(CS_ARCH_X86, CS_MODE_32)
 
@@ -23,28 +32,28 @@ def make_names_unique(syms):
     return nameMapping
 
 def write_code_section(filebytes, section, symbols):
-    print('.intel_syntax noprefix')
-    print('.section .text, "ax",@progbits')
+    args.output.write('.intel_syntax noprefix\n')
+    args.output.write('.section .text, "ax",@progbits\n')
     sectionBytes = filebytes[section.offdata:section.offdata + section.size]
-    symbolDict = {sym.value:sym for sym in symbols}
+    symbolDict = {sym.value:sym for sym in symbols} if symbols is not None else dict()
     nameMapping = make_names_unique(symbolDict)
     symbolAddrs = list(symbolDict.keys()) # Already sorted, so no need to resort
-    symbolAddrs.append(symbolDict[symbolAddrs[0]].value) # Dummy at the end of the list to prevent an error
     curSymbolIndex = 0
-    curSymbol = symbolDict[symbolAddrs[curSymbolIndex]]
+    curSymbol = symbolDict[symbolAddrs[curSymbolIndex]] if len(symbolAddrs) > 0 else None
     for i in md.disasm(sectionBytes, section.vaddr):
         # Print all symbols that are between the last instruction and this one
-        while curSymbolIndex < (len(symbolAddrs) - 1) and i.address >= curSymbol.value:
+        while curSymbolIndex < len(symbolAddrs) and i.address >= curSymbol.value:
             symName = curSymbol.name
             if symName != '__gnu_compiled_c':
                 if curSymbol.value in nameMapping: # Resolve duplicate named symbols
                     symName = nameMapping[curSymbol.value]
                 if curSymbol.storagecls == 0x02: # extern
-                    print('.global ' + symName)
-                    print('.type ' + symName + ',@function')
-                print((symName + ':').ljust(76) + '# ' + hex(curSymbol.value))
+                    args.output.write('.global ' + symName + '\n')
+                    args.output.write('.type ' + symName + ',@function\n')
+                args.output.write((symName + ':').ljust(76) + '# ' + hex(curSymbol.value) + '\n')
             curSymbolIndex += 1
-            curSymbol = symbolDict[symbolAddrs[curSymbolIndex]]
+            if curSymbolIndex < len(symbolAddrs):
+                curSymbol = symbolDict[symbolAddrs[curSymbolIndex]]
 
         mnemonic = i.mnemonic
         op_str = i.op_str
@@ -53,19 +62,22 @@ def write_code_section(filebytes, section, symbols):
         if mnemonic == 'salc':
             mnemonic = '.byte 0xd6'
             op_str = ''
-        print(('    {:12s} {:59s}'.format(mnemonic, op_str)) + '# ' + hex(i.address))
+        args.output.write(('    {:12s} {:59s}'.format(mnemonic, op_str)) + '# ' + hex(i.address) + '\n')
 
 def main():
-    for v in sys.argv[1:]:
-        in_file = open(v, 'rb')
-        filebytes = in_file.read()
-        in_file.close()
-        cffmt = coff.Coff(v)
-        for seckey in cffmt.symtables.keys():
-            section = cffmt.sections[seckey]
-            if section.flags & 0x00000020: # code
-                write_code_section(filebytes, section, cffmt.symtables[seckey])
-            # TODO data, bss
+    in_file = open(args.bin, 'rb')
+    filebytes = in_file.read()
+    in_file.close()
+    cffmt = coff.Coff(args.bin)
+    print(cffmt)
+    print(cffmt.sections)
+    print(cffmt.symtables)
+    for seckey in range(len(cffmt.sections)):
+        section = cffmt.sections[seckey]
+        print(section)
+        if section.flags & 0x00000020: # code
+            write_code_section(filebytes, section, cffmt.symtables.get(seckey))
+        # TODO data, bss
     sys.exit(0)
 
 main()

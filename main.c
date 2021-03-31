@@ -13,16 +13,19 @@
 #include <ucontext.h>
 #include <stdlib.h>
 #include "dos.h"
+#include "log.h"
 
 typedef __attribute__((__cdecl__)) void (func_t)();
+typedef __attribute__((__cdecl__)) const char* (getenv_t)(const char*);
 uint8_t dummy;
 
 // AS.OUT
 uintptr_t loadAddr = 0x1080000;
-// uintptr_t startAddr = 0x01080460;
 uintptr_t startAddr = 0x01093cd4;
 size_t bssSize = 0x010dd940;
 uintptr_t mallocAddr = 0x010d77cc;
+uintptr_t reallocAddr = 0x010d7a14;
+uintptr_t environAddr = 0x010e6340;
 uintptr_t nops[] = {
     (uintptr_t)&dummy,
 };
@@ -81,6 +84,8 @@ uintptr_t int21Addrs[] = {
 #define INT3 0xCC
 #define NOP 0x90
 
+uintptr_t getenvAddr = 0x010d9ad8;
+
 // SIGTRAP handler that creates the context passed to the DOS 21h handler
 void sig_handler(__attribute__((unused)) int signum, __attribute__((unused)) siginfo_t *info, void *vcontext)
 {
@@ -105,7 +110,7 @@ void sig_handler(__attribute__((unused)) int signum, __attribute__((unused)) sig
         .al = al
     };
     
-    printf("Inside handler function\n"
+    LOG_PRINT("DOS syscall\n"
            "  IP:  0x%08lX\n"
            "  AH:  0x%02lX\n"
            "  AL:  0x%02lX\n"
@@ -114,11 +119,11 @@ void sig_handler(__attribute__((unused)) int signum, __attribute__((unused)) sig
            "  EDX: 0x%08X\n"
            "  DS:  0x%04lX\n", 
            ip, ah, al, *ebx, *ecx, *edx, ds);
-    printf("stack\n"
-           "  0x%08X 0x%08X 0x%08X 0x%08X\n"
-           "  0x%08X 0x%08X 0x%08X 0x%08X\n"
-           "  0x%08X 0x%08X 0x%08X 0x%08X\n"
-           "  0x%08X 0x%08X 0x%08X 0x%08X\n",
+    LOG_PRINT("  stack\n"
+           "    0x%08X 0x%08X 0x%08X 0x%08X\n"
+           "    0x%08X 0x%08X 0x%08X 0x%08X\n"
+           "    0x%08X 0x%08X 0x%08X 0x%08X\n"
+           "    0x%08X 0x%08X 0x%08X 0x%08X\n",
            sp[0],  sp[1],  sp[2],  sp[3],
            sp[4],  sp[5],  sp[6],  sp[7],
            sp[8],  sp[9],  sp[10], sp[11],
@@ -133,10 +138,17 @@ __attribute__((__cdecl__)) void *malloc_wrapper(size_t len)
     return malloc(len);
 }
 
-// Overwrites the first instructions of the original binary's malloc to jump to our malloc wrapper instead
-void write_malloc_jump_hook()
+// Wrapper for malloc that will be jumped to via a patch on the original binary's malloc
+__attribute__((__cdecl__)) void *realloc_wrapper(void *ptr, size_t len)
+{
+    return realloc(ptr, len);
+}
+
+// Overwrites the first instructions of some functions in the original binary with jumps to our wrappers instead
+void write_jump_hooks()
 {
     uint32_t mallocWrapperAddr = (uint32_t)&malloc_wrapper;
+    uint32_t reallocWrapperAddr = (uint32_t)&realloc_wrapper;
     uint32_t rel32 = mallocWrapperAddr - (uint32_t)mallocAddr - 5;
     // x86 jmp rel32
     ((uint8_t*)mallocAddr)[0] = 0xE9;
@@ -146,6 +158,16 @@ void write_malloc_jump_hook()
     ((uint8_t*)mallocAddr)[2] = (rel32 >>  8) & 0xFF;
     ((uint8_t*)mallocAddr)[3] = (rel32 >> 16) & 0xFF;
     ((uint8_t*)mallocAddr)[4] = (rel32 >> 24) & 0xFF;
+    
+    rel32 = reallocWrapperAddr - (uint32_t)reallocAddr - 5;
+    // x86 jmp rel32
+    ((uint8_t*)reallocAddr)[0] = 0xE9;
+
+    // jump offset
+    ((uint8_t*)reallocAddr)[1] = (rel32 >>  0) & 0xFF;
+    ((uint8_t*)reallocAddr)[2] = (rel32 >>  8) & 0xFF;
+    ((uint8_t*)reallocAddr)[3] = (rel32 >> 16) & 0xFF;
+    ((uint8_t*)reallocAddr)[4] = (rel32 >> 24) & 0xFF;
 }
 
 int main(int argc, char* argv[])
@@ -155,12 +177,12 @@ int main(int argc, char* argv[])
     void *test;
     func_t *binStart = (func_t *)startAddr;
     size_t i;
-    char *args[] = {argv[1],"-o","b.out","in.s","-c"};
+    char *args[] = {argv[1],"-o","out.o","in.s","-c","-mips3"};
     struct sigaction sig_action;
 
     if (argc != 2)
     {
-        printf("Usage: %s [binary]\n", argv[0]);
+        LOG_PRINT("Usage: %s [binary]\n", argv[0]);
         return 0;
     }
     
@@ -181,9 +203,10 @@ int main(int argc, char* argv[])
     test = mmap((void*)loadAddr, bssSize + fileLen - 0x1000, PROT_READ | PROT_EXEC | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0x0);
     // Read the program bytes into the mmap'd memory region
     fseek(f, 0x1000, SEEK_SET);
-    if (fread(test, fileLen - 0x1000, 1, f) < 1)
+    // if (fread(test, fileLen - 0x1000, 1, f) < 1)
+    if (fread(test, 0x5beb4 + 0x1a8c, 1, f) < 1)
     {
-        printf("Failed to read file contents\n");
+        LOG_PRINT("Failed to read file contents\n");
         return 1;
     }
     fclose(f);
@@ -201,10 +224,16 @@ int main(int argc, char* argv[])
         *((uint8_t *)(int21Addrs[i] + 1)) = NOP;
     }
 
-    // Write malloc jump hook onto the binaries malloc
-    write_malloc_jump_hook();
+    // Overwrite the program's environ with the real one
+    *(char***)environAddr = environ;
 
-    // Call the binary's main function
+    // Write malloc/realloc jump hooks onto the program's ram
+    write_jump_hooks();
+
+    // Initialize any required DOS state
+    dos_init();
+
+    // Call the program's main function
     binStart(sizeof(args) / sizeof(args[0]), args);
 
     return 0;

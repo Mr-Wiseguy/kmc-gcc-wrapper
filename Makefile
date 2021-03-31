@@ -12,4 +12,7 @@ $(OUT): $(SRCS) $(HEADERS)
 clean:
 	rm $(OUT)
 
-.PHONY: all clean
+test: $(OUT)
+	./$(OUT) kmc/gcc/MIPSE/BIN/AS.OUT
+
+.PHONY: all clean test

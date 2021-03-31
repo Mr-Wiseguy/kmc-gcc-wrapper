@@ -34,13 +34,13 @@ def make_names_unique(syms):
 def write_code_section(filebytes, section, symbols):
     args.output.write('.intel_syntax noprefix\n')
     args.output.write('.section .text, "ax",@progbits\n')
-    sectionBytes = filebytes[section.offdata:section.offdata + section.size]
+    sectionBytes = filebytes[0x1000+0x460:section.offdata + section.size]
     symbolDict = {sym.value:sym for sym in symbols} if symbols is not None else dict()
     nameMapping = make_names_unique(symbolDict)
     symbolAddrs = list(symbolDict.keys()) # Already sorted, so no need to resort
     curSymbolIndex = 0
     curSymbol = symbolDict[symbolAddrs[curSymbolIndex]] if len(symbolAddrs) > 0 else None
-    for i in md.disasm(sectionBytes, section.vaddr):
+    for i in md.disasm(sectionBytes, section.vaddr + 0x460):
         # Print all symbols that are between the last instruction and this one
         while curSymbolIndex < len(symbolAddrs) and i.address >= curSymbol.value:
             symName = curSymbol.name
@@ -70,6 +70,7 @@ def main():
     in_file.close()
     cffmt = coff.Coff(args.bin)
     print(cffmt)
+    print(cffmt.opthdr)
     print(cffmt.sections)
     print(cffmt.symtables)
     for seckey in range(len(cffmt.sections)):

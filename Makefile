@@ -1,18 +1,19 @@
 OUT := wrapper
 SRCS := $(wildcard ./*.c)
 HEADERS := $(wildcard ./*.h)
-CFLAGS := -O3 -Wall -Wextra -Wpedantic -m32 -ggdb
+CFLAGS := -O3 -Wall -Wextra -Wpedantic -m32 -ggdb -Iinclude
 CC := gcc
+PROGRAMS := as
 
-all: $(OUT)
+all: $(PROGRAMS)
 
-$(OUT): $(SRCS) $(HEADERS)
-	$(CC) $(CFLAGS) $(SRCS) -o $@
+$(PROGRAMS): $(SRCS) $(HEADERS)
+	$(CC) $(CFLAGS) $(SRCS) -DPROG=$@ -o $@
 
 clean:
-	rm $(OUT)
+	rm -f $(PROGRAMS)
 
-test: $(OUT)
-	./$(OUT) kmc/gcc/MIPSE/BIN/AS.OUT
+test: as
+	./as in.s -o out.o
 
 .PHONY: all clean test

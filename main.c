@@ -15,76 +15,19 @@
 #include "dos.h"
 #include "log.h"
 
+// Variable include
+#define INCLUDE_PROG() <PROG.h>
+#include INCLUDE_PROG()
+
 typedef __attribute__((__cdecl__)) void (func_t)();
 typedef __attribute__((__cdecl__)) const char* (getenv_t)(const char*);
-uint8_t dummy;
 
-// AS.OUT
-uintptr_t loadAddr = 0x1080000;
-uintptr_t startAddr = 0x01093cd4;
-size_t bssSize = 0x010dd940;
-uintptr_t mallocAddr = 0x010d77cc;
-uintptr_t reallocAddr = 0x010d7a14;
-uintptr_t environAddr = 0x010e6340;
-uintptr_t nops[] = {
-    (uintptr_t)&dummy,
-};
-
-uintptr_t int21Addrs[] = {
-    0x010d6b78,
-    0x010d6b85,
-    0x010d6b98,
-    0x010d6bb6,
-    0x010d6bc7,
-    0x010d6bdf,
-    0x010d6bf7,
-    0x010d6c16,
-    0x010d6c33,
-    0x010d6c4a,
-    0x010d6c63,
-    0x010d6c72,
-    0x010d6c89,
-    0x010d6c9f,
-    0x010d6cbf,
-    0x010d6ceb,
-    0x010d6d1a,
-    0x010d6d2e,
-    0x010d6d42,
-    0x010d6d56,
-    0x010d6d5e,
-    0x010d6d77,
-    0x010d6d8f,
-    0x010d6d9e,
-    0x010d6db2,
-    0x010d6dd3,
-    0x010d6de2,
-    0x010d6dff,
-    0x010d6e17,
-    0x010d6e59,
-    0x010d6e83,
-    0x010d6eae,
-};
-
-// GCC.OUT
-// uintptr_t loadAddr = 0x1000000;
-// uintptr_t startAddr = 0x1000488;
-// uintptr_t nops[] = {
-//     0x100a870, //   mov    %ax,%fs
-//     0x100a871,
-//     0x100a872,
-
-//     0x100a879, //   mov    %fs:(%ecx),%al
-//     0x100a87a,
-//     0x100a87b,
-// };
 
 #define NUM_NOPS (sizeof(nops) / sizeof(nops[0]))
 #define NUM_INT21 (sizeof(int21Addrs) / sizeof(int21Addrs[0]))
 
 #define INT3 0xCC
 #define NOP 0x90
-
-uintptr_t getenvAddr = 0x010d9ad8;
 
 // SIGTRAP handler that creates the context passed to the DOS 21h handler
 void sig_handler(__attribute__((unused)) int signum, __attribute__((unused)) siginfo_t *info, void *vcontext)
@@ -173,18 +116,10 @@ void write_jump_hooks()
 int main(int argc, char* argv[])
 {
     FILE *f;
-    long fileLen;
-    void *test;
+    void *progMem;
     func_t *binStart = (func_t *)startAddr;
     size_t i;
-    char *args[] = {argv[1],"-o","out.o","in.s","-c","-mips3"};
     struct sigaction sig_action;
-
-    if (argc != 2)
-    {
-        LOG_PRINT("Usage: %s [binary]\n", argv[0]);
-        return 0;
-    }
     
     // Set up the SIGTRAP handler
     memset(&sig_action, 0, sizeof(sig_action));
@@ -194,19 +129,20 @@ int main(int argc, char* argv[])
     sigaction(SIGTRAP, &sig_action, 0); // Register signal handler
 
     // Get the length of the input binary
-    f = fopen(argv[1], "rb");
-    fseek(f, 0L, SEEK_END);
-    fileLen = ftell(f);
-    fseek(f, 0L, SEEK_SET);
+    f = fopen(BIN_FILE, "rb");
+    if (f == NULL)
+    {
+        LOG_PRINT("Error: Cannot open %s\n", BIN_FILE);
+        return 1;
+    }
     
     // mmap a region of memory at the fixed load address for the given binary
-    test = mmap((void*)loadAddr, bssSize + fileLen - 0x1000, PROT_READ | PROT_EXEC | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0x0);
+    progMem = mmap((void*)loadAddr, codeDataLength + bssSize - fileOffset, PROT_READ | PROT_EXEC | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0x0);
     // Read the program bytes into the mmap'd memory region
-    fseek(f, 0x1000, SEEK_SET);
-    // if (fread(test, fileLen - 0x1000, 1, f) < 1)
-    if (fread(test, 0x5beb4 + 0x1a8c, 1, f) < 1)
+    fseek(f, fileOffset, SEEK_SET);
+    if (fread(progMem, codeDataLength, 1, f) < 1)
     {
-        LOG_PRINT("Failed to read file contents\n");
+        LOG_PRINT("Error: Failed to read file contents\n");
         return 1;
     }
     fclose(f);
@@ -234,7 +170,7 @@ int main(int argc, char* argv[])
     dos_init();
 
     // Call the program's main function
-    binStart(sizeof(args) / sizeof(args[0]), args);
+    binStart(argc, argv);
 
     return 0;
 }

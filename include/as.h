@@ -10,6 +10,7 @@ uintptr_t mallocAddr = 0x010d77cc;
 uintptr_t reallocAddr = 0x010d7a14;
 uintptr_t environAddr = 0x010e6340;
 uintptr_t getenvAddr = 0x010d9ad8; // Not used
+uintptr_t pathfuncAddr = 0x010d7f40;
 uintptr_t nops[] = {
     (uintptr_t)&dummy,
 };

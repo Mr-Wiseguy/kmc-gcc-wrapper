@@ -51,6 +51,18 @@ void replace_forwardslashes(char *input, int len)
     }
 }
 
+void remove_out_extension(char *input)
+{
+    char *outsubstr = strstr(input, ".out");
+    if (outsubstr != NULL)
+    {
+        outsubstr[0] = 0;
+        outsubstr[1] = 0;
+        outsubstr[2] = 0;
+        outsubstr[3] = 0;
+    }
+}
+
 void dos_open_file(context_t *ctx)
 {
     const char *filename = (const char*)*ctx->edx;
@@ -87,6 +99,7 @@ void dos_open_file(context_t *ctx)
     filenameReplaced[filenameLen] = 0;
     memcpy(filenameReplaced, filename, filenameLen);
     replace_backslashes(filenameReplaced, filenameLen);
+    remove_out_extension(filenameReplaced); // redirects x.out to x for running programs
 
 
     if (filemode == DOS_FILE_READ && (access(filenameReplaced, F_OK) != 0))

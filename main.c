@@ -29,6 +29,8 @@ typedef __attribute__((__cdecl__)) const char* (getenv_t)(const char*);
 #define INT3 0xCC
 #define NOP 0x90
 
+char *programPath;
+
 // SIGTRAP handler that creates the context passed to the DOS 21h handler
 void sig_handler(__attribute__((unused)) int signum, __attribute__((unused)) siginfo_t *info, void *vcontext)
 {
@@ -89,11 +91,92 @@ __attribute__((__cdecl__)) void *realloc_wrapper(void *ptr, size_t len)
     return realloc(ptr, len);
 }
 
+// Wrapper for an annoying function that "converts" paths to DOS valid ones
+__attribute__((__cdecl__)) char *pathfunc_wrapper(char *in)
+{
+    return in; // That'll show em
+}
+
+#ifdef REPLACE_SYSTEM
+#define EXE_EXT_LEN 4 // length of ".exe"
+#define AT_LEN 1 // length of " @"
+
+// Changes gcc.exe to ./gcc
+void redirect_command(char *cmd)
+{
+    char *exePos = strstr(cmd, ".exe @");
+    if (exePos != NULL)
+    {
+        int offset = (exePos - cmd) / sizeof(char);
+        memmove(cmd + EXE_EXT_LEN + AT_LEN, cmd, offset);
+        cmd[0] = ' ';
+        cmd[1] = ' ';
+        cmd[2] = ' ';
+        cmd[3] = '.';
+        cmd[4] = '/';
+        cmd[offset + EXE_EXT_LEN + AT_LEN] = ' ';
+    }
+}
+
+// TODO make this function instead escape the parenthesis in backslashes
+void replace_parens(char *str)
+{
+    char *openIndex = strchr(str, '(');
+
+    if (openIndex != NULL)
+    {
+        while (*str)
+        {
+            *str = ' ';
+            str++;
+        }
+    }
+}
+
+// Caller-freed memory!
+char *build_call_string(__attribute__((unused))char *cmd, char *argv[])
+{
+    char *cmdString;
+    int readlinkLen;
+    char **curArg = argv;
+    int cmdLen = 3;
+
+    cmdString = malloc(strlen(programPath));
+    strcpy(cmdString, programPath);
+    cmdLen = strlen(programPath);
+    while (*curArg)
+    {
+        int curArgLen = strlen(*curArg);
+        cmdString = (char *)realloc(cmdString, cmdLen + curArgLen + 1);
+        strcat(cmdString, *curArg);
+        strcat(cmdString, " ");
+        replace_parens(cmdString + cmdLen - 1);
+        cmdLen += curArgLen + 1;
+        curArg++;
+    }
+
+    return cmdString;
+}
+
+__attribute__((__cdecl__)) int system_wrapper(char *cmd, char *argv[])
+{
+    int ret;
+    char *callString = build_call_string(cmd, argv); 
+    ret = system(callString);
+    free(callString);
+    return ret;
+}
+#endif
+
 // Overwrites the first instructions of some functions in the original binary with jumps to our wrappers instead
 void write_jump_hooks()
 {
     uint32_t mallocWrapperAddr = (uint32_t)&malloc_wrapper;
     uint32_t reallocWrapperAddr = (uint32_t)&realloc_wrapper;
+    uint32_t pathfuncWrapperAddr = (uint32_t)&pathfunc_wrapper;
+#ifdef REPLACE_SYSTEM
+    uint32_t systemWrapperAddr = (uint32_t)&system_wrapper;
+#endif
     uint32_t rel32 = mallocWrapperAddr - (uint32_t)mallocAddr - 5;
     // x86 jmp rel32
     ((uint8_t*)mallocAddr)[0] = 0xE9;
@@ -113,6 +196,41 @@ void write_jump_hooks()
     ((uint8_t*)reallocAddr)[2] = (rel32 >>  8) & 0xFF;
     ((uint8_t*)reallocAddr)[3] = (rel32 >> 16) & 0xFF;
     ((uint8_t*)reallocAddr)[4] = (rel32 >> 24) & 0xFF;
+    
+    rel32 = pathfuncWrapperAddr - (uint32_t)pathfuncAddr - 5;
+    // x86 jmp rel32
+    ((uint8_t*)pathfuncAddr)[0] = 0xE9;
+
+    // jump offset
+    ((uint8_t*)pathfuncAddr)[1] = (rel32 >>  0) & 0xFF;
+    ((uint8_t*)pathfuncAddr)[2] = (rel32 >>  8) & 0xFF;
+    ((uint8_t*)pathfuncAddr)[3] = (rel32 >> 16) & 0xFF;
+    ((uint8_t*)pathfuncAddr)[4] = (rel32 >> 24) & 0xFF;
+
+#ifdef REPLACE_SYSTEM
+    
+    rel32 = systemWrapperAddr - (uint32_t)systemAddr - 5;
+    // x86 jmp rel32
+    ((uint8_t*)systemAddr)[0] = 0xE9;
+
+    // jump offset
+    ((uint8_t*)systemAddr)[1] = (rel32 >>  0) & 0xFF;
+    ((uint8_t*)systemAddr)[2] = (rel32 >>  8) & 0xFF;
+    ((uint8_t*)systemAddr)[3] = (rel32 >> 16) & 0xFF;
+    ((uint8_t*)systemAddr)[4] = (rel32 >> 24) & 0xFF;
+#endif
+}
+
+FILE *fopen_relative(const char *relativePath, const char *mode)
+{
+    int absPathLen = strlen(programPath) + strlen(relativePath) + 1;
+    char *absPath = malloc(absPathLen);
+    FILE *ret;
+    strcpy(absPath, programPath);
+    strcat(absPath, relativePath);
+    ret = fopen(absPath, mode);
+    free(absPath);
+    return ret;
 }
 
 int main(int argc, char* argv[])
@@ -122,6 +240,14 @@ int main(int argc, char* argv[])
     func_t *binStart = (func_t *)startAddr;
     size_t i;
     struct sigaction sig_action;
+    char *programPathSlashPos;
+
+    programPath = realpath(argv[0], NULL);
+    programPathSlashPos = strrchr(programPath, '/');
+    if (programPathSlashPos != NULL)
+    {
+        *(programPathSlashPos + 1) = 0;
+    }
     
     // Set up the SIGTRAP handler
     memset(&sig_action, 0, sizeof(sig_action));
@@ -131,11 +257,11 @@ int main(int argc, char* argv[])
     sigaction(SIGTRAP, &sig_action, 0); // Register signal handler
 
     // Get the length of the input binary
-    f = fopen(BIN_FILE, "rb");
+    f = fopen_relative(BIN_FILE, "rb");
     if (f == NULL)
     {
-        LOG_PRINT("Error: Cannot open %s\n", BIN_FILE);
-        return 1;
+        fprintf(stderr, "Error: Cannot open %s\n", BIN_FILE);
+        return EXIT_FAILURE;
     }
     
     // mmap a region of memory at the fixed load address for the given binary
@@ -144,8 +270,8 @@ int main(int argc, char* argv[])
     fseek(f, fileOffset, SEEK_SET);
     if (fread(progMem, codeDataLength, 1, f) < 1)
     {
-        LOG_PRINT("Error: Failed to read file contents\n");
-        return 1;
+        fprintf(stderr, "Error: Failed to read file contents\n");
+        return EXIT_FAILURE;
     }
     fclose(f);
 
@@ -174,5 +300,7 @@ int main(int argc, char* argv[])
     // Call the program's main function
     binStart(argc, argv);
 
-    return 0;
+    free(programPath);
+
+    return EXIT_SUCCESS;
 }

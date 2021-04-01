@@ -9,6 +9,7 @@ size_t bssSize = 0x011aefa4;
 uintptr_t mallocAddr = 0x011a4bd8;
 uintptr_t reallocAddr = 0x011a4e20;
 uintptr_t environAddr = 0x011b6b98;
+uintptr_t pathfuncAddr = 0x011a534c;
 uintptr_t nops[] = {
     (uintptr_t)&dummy,
 };

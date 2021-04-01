@@ -137,7 +137,6 @@ void replace_parens(char *str)
 char *build_call_string(__attribute__((unused))char *cmd, char *argv[])
 {
     char *cmdString;
-    int readlinkLen;
     char **curArg = argv;
     int cmdLen = 3;
 

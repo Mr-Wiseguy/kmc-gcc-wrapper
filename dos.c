@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <limits.h>
 
 #include "dos.h"
 #include "log.h"
@@ -35,12 +36,25 @@ void replace_backslashes(char *input, int len)
     }
 }
 
+void replace_forwardslashes(char *input, int len)
+{
+    while (len > 0)
+    {
+        if (*input == '/')
+        {
+            *input = '\\';
+        }
+        input++;
+        len--;
+    }
+}
+
 void dos_open_file(context_t *ctx)
 {
     const char *filename = (const char*)*ctx->edx;
     int filemode = ctx->al;
     int filenameLen = strnlen(filename, FILENAME_MAX);
-    char *filenameReplaced; // After replacing backslashes with forward slashes
+    char filenameReplaced[filenameLen + 1]; // After replacing backslashes with forward slashes
     char *modestr = NULL;
     switch (filemode)
     {
@@ -68,7 +82,6 @@ void dos_open_file(context_t *ctx)
         DOS_SET_ERROR(ctx);
         DOS_RETURN(ctx, DOS_ERR_FILE_NOT_FOUND); // does not exist
     }
-    filenameReplaced = malloc(filenameLen + 1);
     filenameReplaced[filenameLen] = 0;
     memcpy(filenameReplaced, filename, filenameLen);
     replace_backslashes(filenameReplaced, filenameLen);
@@ -103,8 +116,7 @@ void dos_create_file(context_t *ctx)
 {
     const char *filename = (const char*)*ctx->edx;
     int filenameLen = strnlen(filename, FILENAME_MAX);
-    char *filenameReplaced; // After replacing backslashes with forward slashes
-    LOG_PRINT("  create file: %s\n", filename);
+    char filenameReplaced[filenameLen + 1]; // After replacing backslashes with forward slashes
     if (filenameLen == FILENAME_MAX)
     {
         LOG_PRINT("  filename too long: %s\n", filename);
@@ -112,10 +124,10 @@ void dos_create_file(context_t *ctx)
         DOS_SET_ERROR(ctx);
         DOS_RETURN(ctx, DOS_ERR_FILE_NOT_FOUND); // does not exist
     }
-    filenameReplaced = malloc(filenameLen + 1);
     filenameReplaced[filenameLen] = 0;
     memcpy(filenameReplaced, filename, filenameLen);
     replace_backslashes(filenameReplaced, filenameLen);
+    LOG_PRINT("  create file: %s\n", filenameReplaced);
     for (int i = 0; i < NUM_HANDLES; i++)
     {
         if (fileHandles[i] && strcmp(filenameReplaced, filenames[i]) == 0)
@@ -181,12 +193,22 @@ void dos_write(context_t *ctx)
 void dos_delete(context_t *ctx)
 {
     const char *filename = (const char*)*ctx->edx;
-    int ret;
+    int filenameLen = strnlen(filename, FILENAME_MAX);
+    char filenameReplaced[filenameLen + 1]; // After replacing backslashes with forward slashes
 
-    LOG_PRINT("  deleting file: %s\n", filename);
+    if (filenameLen == FILENAME_MAX)
+    {
+        LOG_PRINT("  filename too long: %s\n", filename);
+        LOG_PRINT("    setting carry flag\n");
+        DOS_SET_ERROR(ctx);
+        DOS_RETURN(ctx, DOS_ERR_FILE_NOT_FOUND); // does not exist
+    }
+    filenameReplaced[filenameLen] = 0;
+    memcpy(filenameReplaced, filename, filenameLen);
+    replace_backslashes(filenameReplaced, filenameLen);
+    LOG_PRINT("  deleting file: %s\n", filenameReplaced);
 
-    ret = remove(filename);
-    if (ret != 0)
+    if (remove(filenameReplaced) != 0)
     {
         DOS_SET_ERROR(ctx);
         DOS_RETURN(ctx, DOS_ERR_FILE_NOT_FOUND); // Technically could be another reason but w/e
@@ -256,6 +278,91 @@ void dos_close_file(context_t *ctx)
     DOS_RETURN(ctx, 0x00);
 }
 
+void dos_file_attrib(context_t *ctx)
+{
+    dos_file_attrib_t action = ctx->al;
+    const char *filename = (const char*)*ctx->edx;
+    int filenameLen = strnlen(filename, FILENAME_MAX);
+    char filenameReplaced[filenameLen + 1]; // After replacing backslashes with forward slashes
+    if (filenameLen == FILENAME_MAX)
+    {
+        LOG_PRINT("  filename too long: %s\n", filename);
+        LOG_PRINT("    setting carry flag\n");
+        DOS_SET_ERROR(ctx);
+        DOS_RETURN(ctx, DOS_ERR_FILE_NOT_FOUND); // does not exist
+    }
+    filenameReplaced[filenameLen] = 0;
+    memcpy(filenameReplaced, filename, filenameLen);
+    replace_backslashes(filenameReplaced, filenameLen);
+    LOG_PRINT("  get/set attrib file: action %d file %s\n", action, filenameReplaced);
+
+    switch (action)
+    {
+        case DOS_ATTRIB_GET:
+            if (access(filenameReplaced, F_OK) != 0)
+            {
+                LOG_PRINT("  file not found\n");
+                DOS_SET_ERROR(ctx);
+                DOS_RETURN(ctx, DOS_ERR_FILE_NOT_FOUND);
+            }
+            DOS_CLEAR_ERROR(ctx);
+            DOS_RETURN(ctx, 0x00); // TODO read actual attributes
+            break;
+        case DOS_ATTRIB_SET:
+            LOG_PRINT("  unimplemented\n");
+            exit(EXIT_FAILURE);
+            break;
+    }
+    
+    DOS_CLEAR_ERROR(ctx);
+    DOS_RETURN(ctx, 0x00);
+}
+
+uint32_t dta = 0;
+
+void dos_set_dta(context_t *ctx)
+{
+    LOG_PRINT("  setting DTA to 0x%08X\n", *ctx->edx);
+    dta = *ctx->edx;
+}
+
+void dos_find_file(context_t *ctx)
+{
+    const char *filename = (const char*)*ctx->edx;
+    int filenameLen = strnlen(filename, FILENAME_MAX);
+    char filenameReplaced[filenameLen + 1]; // After replacing backslashes with forward slashes
+    if (filenameLen == FILENAME_MAX)
+    {
+        LOG_PRINT("  filename too long: %s\n", filename);
+        LOG_PRINT("    setting carry flag\n");
+        DOS_SET_ERROR(ctx);
+        DOS_RETURN(ctx, DOS_ERR_FILE_NOT_FOUND); // does not exist
+    }
+    filenameReplaced[filenameLen] = 0;
+    memcpy(filenameReplaced, filename, filenameLen);
+    replace_backslashes(filenameReplaced, filenameLen);
+    LOG_PRINT("  find filename %s\n", filenameReplaced); // TODO actually implement this
+    DOS_CLEAR_ERROR(ctx);
+    DOS_RETURN(ctx, 0);
+}
+
+void dos_get_cwd(context_t *ctx)
+{
+    char *pathOut = (char*)*ctx->esi;
+    char cwd[DOS_MAX_PATH + 1];
+    LOG_PRINT("  get cwd\n");
+    if (getcwd(cwd, DOS_MAX_PATH) == NULL)
+    {
+        LOG_PRINT("    get cwd error\n");
+        DOS_SET_ERROR(ctx);
+        DOS_RETURN(ctx, DOS_ERR_PATH_NOT_FOUND); // TODO is this the right error?
+    }
+    replace_forwardslashes(cwd, DOS_MAX_PATH + 1);
+    strncpy(pathOut, cwd + 1, DOS_MAX_PATH); // Omit the leading forward slash
+    DOS_CLEAR_ERROR(ctx);
+    DOS_RETURN(ctx, 0);
+}
+
 #define DOS_HANDLER(ctx, value, handler) \
     case value: \
         handler(ctx); \
@@ -276,11 +383,16 @@ void dos_21h_handler(context_t *ctx)
         DOS_HANDLER(ctx, DOS_SEEK, dos_seek);
         DOS_HANDLER(ctx, DOS_READ, dos_read);
         DOS_HANDLER(ctx, DOS_CLOSE_FILE, dos_close_file);
+        DOS_HANDLER(ctx, DOS_FILE_ATTRIB, dos_file_attrib);
+        DOS_HANDLER(ctx, DOS_SET_DTA, dos_set_dta);
+        DOS_HANDLER(ctx, DOS_FIND_FILE, dos_find_file);
+        DOS_HANDLER(ctx, DOS_GET_CWD, dos_get_cwd);
         case DOS_EXIT:
             exit(ctx->al);
             break;
         default:
-            LOG_PRINT("Unimplemented system call: %02X\n", ctx->ah);
+            LOG_PRINT("Unimplemented system call: 0x%02X\n", ctx->ah);
+            exit(EXIT_FAILURE);
             break;
     }
 }

@@ -38,6 +38,7 @@ void sig_handler(__attribute__((unused)) int signum, __attribute__((unused)) sig
     uint32_t *ecx = (uint32_t *)&context->uc_mcontext.gregs[REG_ECX];
     uint32_t *edx = (uint32_t *)&context->uc_mcontext.gregs[REG_EDX];
     uint32_t *efl = (uint32_t *)&context->uc_mcontext.gregs[REG_EFL];
+    uint32_t *esi = (uint32_t *)&context->uc_mcontext.gregs[REG_ESI];
     unsigned long ip = context->uc_mcontext.gregs[REG_EIP];
     unsigned long ds = context->uc_mcontext.gregs[REG_DS];
     uint32_t *sp = (uint32_t*)context->uc_mcontext.gregs[REG_ESP];
@@ -49,6 +50,7 @@ void sig_handler(__attribute__((unused)) int signum, __attribute__((unused)) sig
         .ecx = ecx,
         .edx = edx,
         .efl = efl,
+        .esi = esi,
         .ah = ah,
         .al = al
     };

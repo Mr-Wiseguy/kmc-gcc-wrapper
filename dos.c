@@ -115,6 +115,7 @@ void dos_open_file(context_t *ctx)
         if (fileHandles[i] && strcmp(filenameReplaced, filenames[i]) == 0)
         {
             LOG_PRINT("    returning existing file handle: %d\n", i);
+            fseek(fileHandles[i], 0, SEEK_SET);
             DOS_CLEAR_ERROR(ctx);
             DOS_RETURN(ctx, i);
         }
@@ -148,6 +149,7 @@ void dos_create_file(context_t *ctx)
         if (fileHandles[i] && strcmp(filenameReplaced, filenames[i]) == 0)
         {
             LOG_PRINT("    returning existing file handle: %d\n", i);
+            fseek(fileHandles[i], 0, SEEK_SET);
             DOS_CLEAR_ERROR(ctx);
             DOS_RETURN(ctx, i);
         }

@@ -3,7 +3,7 @@ SRCS := $(wildcard ./*.c)
 HEADERS := $(wildcard ./*.h)
 CFLAGS := -O3 -Wall -Wextra -Wpedantic -m32 -ggdb -Iinclude
 CC := gcc
-PROGRAMS := as cc1
+PROGRAMS := as cc1 cpp
 
 all: $(PROGRAMS)
 

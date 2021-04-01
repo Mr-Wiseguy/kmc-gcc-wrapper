@@ -3,6 +3,8 @@
 #include <unistd.h>
 #include <string.h>
 #include <limits.h>
+#include <sys/stat.h>
+#include <time.h>
 
 #include "dos.h"
 #include "log.h"
@@ -363,6 +365,46 @@ void dos_get_cwd(context_t *ctx)
     DOS_RETURN(ctx, 0);
 }
 
+void dos_get_set_timestamp(context_t *ctx)
+{
+    dos_timestamp_action_t action = ctx->al;
+    int handle = (*ctx->ebx) & 0xFFFF;
+    int fd;
+    struct stat details;
+    struct tm *time;
+    int timeRet = 0;
+    int dateRet = 0;
+
+    LOG_PRINT("  get/set timestamp: action %d handle %d\n", action, handle);
+    VALID_HANDLE_CHECK(ctx, handle);
+
+    fd = fileno(fileHandles[handle]);
+
+    switch (action)
+    {
+        case DOS_TIMESTAMP_GET:
+            fstat(fd, &details);
+            time = localtime(&details.st_mtime);
+            timeRet |= (time->tm_sec / 2)   << 0;
+            timeRet |= (time->tm_min)       << 5;
+            timeRet |= (time->tm_hour)      << 11;
+            dateRet |= (time->tm_mday)      << 0;
+            dateRet |= (time->tm_mon)       << 5;
+            dateRet |= (time->tm_year - 80) << 9;
+            DOS_CLEAR_ERROR(ctx);
+            DOS_RETURN(ctx, 0x00); // TODO read actual attributes
+            break;
+        case DOS_TIMESTAMP_SET:
+        default:
+            LOG_PRINT("  unimplemented\n");
+            exit(EXIT_FAILURE);
+            break;
+    }
+    
+    DOS_CLEAR_ERROR(ctx);
+    DOS_RETURN(ctx, 0x00);
+}
+
 #define DOS_HANDLER(ctx, value, handler) \
     case value: \
         handler(ctx); \
@@ -387,6 +429,7 @@ void dos_21h_handler(context_t *ctx)
         DOS_HANDLER(ctx, DOS_SET_DTA, dos_set_dta);
         DOS_HANDLER(ctx, DOS_FIND_FILE, dos_find_file);
         DOS_HANDLER(ctx, DOS_GET_CWD, dos_get_cwd);
+        DOS_HANDLER(ctx, DOS_GET_SET_TIMESTAMP, dos_get_set_timestamp);
         case DOS_EXIT:
             exit(ctx->al);
             break;

@@ -27,6 +27,7 @@ typedef enum {
     DOS_GET_CWD = 0x47,
     DOS_EXIT = 0x4C,
     DOS_FIND_FILE = 0x4E,
+    DOS_GET_SET_TIMESTAMP = 0x57,
 } dos_api_t;
 
 typedef enum {
@@ -48,6 +49,11 @@ typedef enum {
     DOS_ATTRIB_GET = 0,
     DOS_ATTRIB_SET = 1,
 } dos_file_attrib_t;
+
+typedef enum {
+    DOS_TIMESTAMP_GET = 0,
+    DOS_TIMESTAMP_SET = 1,
+} dos_timestamp_action_t;
 
 typedef struct {
     uint32_t *eax;

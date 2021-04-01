@@ -41,9 +41,11 @@ void sig_handler(__attribute__((unused)) int signum, __attribute__((unused)) sig
     uint32_t *edx = (uint32_t *)&context->uc_mcontext.gregs[REG_EDX];
     uint32_t *efl = (uint32_t *)&context->uc_mcontext.gregs[REG_EFL];
     uint32_t *esi = (uint32_t *)&context->uc_mcontext.gregs[REG_ESI];
+#ifndef NDEBUG
     unsigned long ip = context->uc_mcontext.gregs[REG_EIP];
     unsigned long ds = context->uc_mcontext.gregs[REG_DS];
     uint32_t *sp = (uint32_t*)context->uc_mcontext.gregs[REG_ESP];
+#endif
     unsigned long ah = ((*eax) >> 8) & 0xFF;
     unsigned long al = ((*eax) >> 0) & 0xFF;
     context_t ctx = {

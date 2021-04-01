@@ -22,10 +22,25 @@ int numFileHandles = 10;
         DOS_RETURN(ctx, DOS_ERR_INVALID_HANDLE); \
     }
 
+void replace_backslashes(char *input, int len)
+{
+    while (len > 0)
+    {
+        if (*input == '\\')
+        {
+            *input = '/';
+        }
+        input++;
+        len--;
+    }
+}
+
 void dos_open_file(context_t *ctx)
 {
     const char *filename = (const char*)*ctx->edx;
     int filemode = ctx->al;
+    int filenameLen = strnlen(filename, FILENAME_MAX);
+    char *filenameReplaced; // After replacing backslashes with forward slashes
     char *modestr = NULL;
     switch (filemode)
     {
@@ -46,25 +61,38 @@ void dos_open_file(context_t *ctx)
         DOS_SET_ERROR(ctx);
         DOS_RETURN(ctx, DOS_ERR_INVALID_ACCESS_MODE); // access code invalid
     }
-    if (filemode == DOS_FILE_READ && (access(filename, F_OK) != 0))
+    if (filenameLen == FILENAME_MAX)
     {
-        LOG_PRINT("  file does not exist\n");
+        LOG_PRINT("  filename too long: %s\n", filename);
         LOG_PRINT("    setting carry flag\n");
         DOS_SET_ERROR(ctx);
         DOS_RETURN(ctx, DOS_ERR_FILE_NOT_FOUND); // does not exist
     }
-    LOG_PRINT("  open file: %s\n", filename);
+    filenameReplaced = malloc(filenameLen + 1);
+    filenameReplaced[filenameLen] = 0;
+    memcpy(filenameReplaced, filename, filenameLen);
+    replace_backslashes(filenameReplaced, filenameLen);
+
+
+    if (filemode == DOS_FILE_READ && (access(filenameReplaced, F_OK) != 0))
+    {
+        LOG_PRINT("  file does not exist: %s\n", filenameReplaced);
+        LOG_PRINT("    setting carry flag\n");
+        DOS_SET_ERROR(ctx);
+        DOS_RETURN(ctx, DOS_ERR_FILE_NOT_FOUND); // does not exist
+    }
+    LOG_PRINT("  open file: %s\n", filenameReplaced);
     for (int i = 0; i < NUM_HANDLES; i++)
     {
-        if (fileHandles[i] && strcmp(filename, filenames[i]) == 0)
+        if (fileHandles[i] && strcmp(filenameReplaced, filenames[i]) == 0)
         {
             LOG_PRINT("    returning existing file handle: %d\n", i);
             DOS_CLEAR_ERROR(ctx);
             DOS_RETURN(ctx, i);
         }
     }
-    fileHandles[numFileHandles] = fopen(filename, modestr);
-    strncpy(filenames[numFileHandles], filename, MAX_FILENAME_LEN);
+    fileHandles[numFileHandles] = fopen(filenameReplaced, modestr);
+    strncpy(filenames[numFileHandles], filenameReplaced, MAX_FILENAME_LEN);
     LOG_PRINT("    returned file handle: %d\n", numFileHandles);
     LOG_PRINT("    clearing carry flag\n");
     DOS_CLEAR_ERROR(ctx); // Clear carry flag
@@ -74,18 +102,31 @@ void dos_open_file(context_t *ctx)
 void dos_create_file(context_t *ctx)
 {
     const char *filename = (const char*)*ctx->edx;
+    int filenameLen = strnlen(filename, FILENAME_MAX);
+    char *filenameReplaced; // After replacing backslashes with forward slashes
     LOG_PRINT("  create file: %s\n", filename);
+    if (filenameLen == FILENAME_MAX)
+    {
+        LOG_PRINT("  filename too long: %s\n", filename);
+        LOG_PRINT("    setting carry flag\n");
+        DOS_SET_ERROR(ctx);
+        DOS_RETURN(ctx, DOS_ERR_FILE_NOT_FOUND); // does not exist
+    }
+    filenameReplaced = malloc(filenameLen + 1);
+    filenameReplaced[filenameLen] = 0;
+    memcpy(filenameReplaced, filename, filenameLen);
+    replace_backslashes(filenameReplaced, filenameLen);
     for (int i = 0; i < NUM_HANDLES; i++)
     {
-        if (fileHandles[i] && strcmp(filename, filenames[i]) == 0)
+        if (fileHandles[i] && strcmp(filenameReplaced, filenames[i]) == 0)
         {
             LOG_PRINT("    returning existing file handle: %d\n", i);
             DOS_CLEAR_ERROR(ctx);
             DOS_RETURN(ctx, i);
         }
     }
-    fileHandles[numFileHandles] = fopen(filename, "wb");
-    strncpy(filenames[numFileHandles], filename, MAX_FILENAME_LEN);
+    fileHandles[numFileHandles] = fopen(filenameReplaced, "wb");
+    strncpy(filenames[numFileHandles], filenameReplaced, MAX_FILENAME_LEN);
     LOG_PRINT("    returned file handle: %d\n", numFileHandles);
     LOG_PRINT("    clearing carry flag\n");
     DOS_CLEAR_ERROR(ctx);

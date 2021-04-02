@@ -9,13 +9,10 @@ size_t bssSize = 0x01011a28;
 uintptr_t mallocAddr = 0x0100b898;
 uintptr_t reallocAddr = 0x0100bae0;
 uintptr_t environAddr = 0x01011d80;
-uintptr_t pathfuncAddr = 0x0100c00c;
+uintptr_t _unix2dosnameAddr = 0x0100c00c;
 uintptr_t nops[] = {
     (uintptr_t)&dummy,
 };
-
-#define REPLACE_SYSTEM
-uintptr_t systemAddr = 0x0100e528;
 
 uintptr_t int21Addrs[] = {
     0x0100a5c0,
@@ -51,3 +48,8 @@ uintptr_t int21Addrs[] = {
     0x0100a8cb,
     0x0100a8f6,
 };
+
+// Extra stuff for GCC specifically
+#define IS_GCC
+uintptr_t mktempAddr = 0x0100e088;
+uintptr_t systemAddr = 0x0100e528;

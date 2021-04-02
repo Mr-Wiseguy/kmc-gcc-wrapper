@@ -9,7 +9,7 @@ size_t bssSize = 0x010967d8;
 uintptr_t mallocAddr = 0x010916d4;
 uintptr_t reallocAddr = 0x0109191c;
 uintptr_t environAddr = 0x0109cca0;
-uintptr_t pathfuncAddr = 0x01091e48;
+uintptr_t _unix2dosnameAddr = 0x01091e48;
 uintptr_t nops[] = {
     (uintptr_t)&dummy,
 };

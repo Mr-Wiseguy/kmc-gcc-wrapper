@@ -94,12 +94,19 @@ __attribute__((__cdecl__)) void *realloc_wrapper(void *ptr, size_t len)
 }
 
 // Wrapper for an annoying function that "converts" paths to DOS valid ones
-__attribute__((__cdecl__)) char *pathfunc_wrapper(char *in)
+__attribute__((__cdecl__)) char *_unix2dosname_wrapper(char *in)
 {
+#ifdef IS_AS
+    char *dotPos = strrchr(in, '.');
+    if (dotPos != NULL)
+    {
+        *(char**)(dos_ext) = dotPos + 1;
+    }
+#endif
     return in; // That'll show em
 }
 
-#ifdef REPLACE_SYSTEM
+#ifdef IS_GCC
 #define EXE_EXT_LEN 4 // length of ".exe"
 #define AT_LEN 1 // length of " @"
 
@@ -167,6 +174,11 @@ __attribute__((__cdecl__)) int system_wrapper(char *cmd, char *argv[])
     free(callString);
     return ret;
 }
+
+__attribute__((__cdecl__)) int mktemp_wrapper(char *template)
+{
+    return mkstemp(template);
+}
 #endif
 
 // Overwrites the first instructions of some functions in the original binary with jumps to our wrappers instead
@@ -174,9 +186,10 @@ void write_jump_hooks()
 {
     uint32_t mallocWrapperAddr = (uint32_t)&malloc_wrapper;
     uint32_t reallocWrapperAddr = (uint32_t)&realloc_wrapper;
-    uint32_t pathfuncWrapperAddr = (uint32_t)&pathfunc_wrapper;
-#ifdef REPLACE_SYSTEM
+    uint32_t _unix2dosnameWrapperAddr = (uint32_t)&_unix2dosname_wrapper;
+#ifdef IS_GCC
     uint32_t systemWrapperAddr = (uint32_t)&system_wrapper;
+    uint32_t mktempWrapperAddr = (uint32_t)&mktemp_wrapper;
 #endif
     uint32_t rel32 = mallocWrapperAddr - (uint32_t)mallocAddr - 5;
     // x86 jmp rel32
@@ -198,17 +211,17 @@ void write_jump_hooks()
     ((uint8_t*)reallocAddr)[3] = (rel32 >> 16) & 0xFF;
     ((uint8_t*)reallocAddr)[4] = (rel32 >> 24) & 0xFF;
     
-    rel32 = pathfuncWrapperAddr - (uint32_t)pathfuncAddr - 5;
+    rel32 = _unix2dosnameWrapperAddr - (uint32_t)_unix2dosnameAddr - 5;
     // x86 jmp rel32
-    ((uint8_t*)pathfuncAddr)[0] = 0xE9;
+    ((uint8_t*)_unix2dosnameAddr)[0] = 0xE9;
 
     // jump offset
-    ((uint8_t*)pathfuncAddr)[1] = (rel32 >>  0) & 0xFF;
-    ((uint8_t*)pathfuncAddr)[2] = (rel32 >>  8) & 0xFF;
-    ((uint8_t*)pathfuncAddr)[3] = (rel32 >> 16) & 0xFF;
-    ((uint8_t*)pathfuncAddr)[4] = (rel32 >> 24) & 0xFF;
+    ((uint8_t*)_unix2dosnameAddr)[1] = (rel32 >>  0) & 0xFF;
+    ((uint8_t*)_unix2dosnameAddr)[2] = (rel32 >>  8) & 0xFF;
+    ((uint8_t*)_unix2dosnameAddr)[3] = (rel32 >> 16) & 0xFF;
+    ((uint8_t*)_unix2dosnameAddr)[4] = (rel32 >> 24) & 0xFF;
 
-#ifdef REPLACE_SYSTEM
+#ifdef IS_GCC
     
     rel32 = systemWrapperAddr - (uint32_t)systemAddr - 5;
     // x86 jmp rel32
@@ -219,6 +232,16 @@ void write_jump_hooks()
     ((uint8_t*)systemAddr)[2] = (rel32 >>  8) & 0xFF;
     ((uint8_t*)systemAddr)[3] = (rel32 >> 16) & 0xFF;
     ((uint8_t*)systemAddr)[4] = (rel32 >> 24) & 0xFF;
+    
+    rel32 = mktempWrapperAddr - (uint32_t)mktempAddr - 5;
+    // x86 jmp rel32
+    ((uint8_t*)mktempAddr)[0] = 0xE9;
+
+    // jump offset
+    ((uint8_t*)mktempAddr)[1] = (rel32 >>  0) & 0xFF;
+    ((uint8_t*)mktempAddr)[2] = (rel32 >>  8) & 0xFF;
+    ((uint8_t*)mktempAddr)[3] = (rel32 >> 16) & 0xFF;
+    ((uint8_t*)mktempAddr)[4] = (rel32 >> 24) & 0xFF;
 #endif
 }
 
@@ -297,6 +320,11 @@ int main(int argc, char* argv[])
 
     // Initialize any required DOS state
     dos_init();
+
+#ifdef IS_AS
+    // Set the program to as
+    *(int*)(_kmc_prg_no) = 2;
+#endif
 
     // Call the program's main function
     binStart(argc, argv);

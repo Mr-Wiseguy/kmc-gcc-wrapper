@@ -238,7 +238,8 @@ void dos_seek(context_t *ctx)
 {
     int whence = ctx->al;
     int handle = (*ctx->ebx) & 0xFFFF;
-    uint64_t offset = ((uint64_t)*ctx->ecx) << 32 | (*ctx->edx);
+    uint64_t offset = ((uint64_t)*ctx->ecx) << 16 | (*ctx->edx);
+    long pos;
 
     LOG_PRINT("  seeking file handle %d to 0x%016llX bytes from whence %d\n", handle, offset, whence);
 
@@ -251,8 +252,12 @@ void dos_seek(context_t *ctx)
         DOS_RETURN(ctx, DOS_ERR_SEEK);
     }
 
+    pos = ftell(fileHandles[handle]);
+
+
     DOS_CLEAR_ERROR(ctx);
-    DOS_RETURN(ctx, ftell(fileHandles[handle]));
+    *ctx->edx = (pos >> 16) & 0xFFFF;
+    DOS_RETURN(ctx, pos & 0xFFFF);
 }
 
 const char testdata[] = ".set noreorder\naddiu $2, $4, 2\njr $31\nnop\n";

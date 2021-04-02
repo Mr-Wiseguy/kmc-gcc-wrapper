@@ -10,7 +10,7 @@ uintptr_t mallocAddr = 0x010d77cc;
 uintptr_t reallocAddr = 0x010d7a14;
 uintptr_t environAddr = 0x010e6340;
 uintptr_t getenvAddr = 0x010d9ad8; // Not used
-uintptr_t pathfuncAddr = 0x010d7f40;
+uintptr_t _unix2dosnameAddr = 0x010d7f40;
 uintptr_t nops[] = {
     (uintptr_t)&dummy,
 };
@@ -49,3 +49,9 @@ uintptr_t int21Addrs[] = {
     0x010d6e83,
     0x010d6eae,
 };
+
+// Extra stuff for AS specifically
+#define IS_AS
+uintptr_t dos_ext = 0x010e62e0;
+uintptr_t _kmc_prg_no = 0x010e685c;
+

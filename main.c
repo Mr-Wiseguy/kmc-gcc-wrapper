@@ -179,6 +179,23 @@ __attribute__((__cdecl__)) int mktemp_wrapper(char *template)
 {
     return mkstemp(template);
 }
+
+__attribute__((__cdecl__)) int unlink_wrapper(char *filename)
+{
+    char *dotPos = strrchr(filename, '.');
+    int ret;
+    // Run unlink twice if there's an extension in the filename
+    // Why does this need to be done? Who knows, but it fixes leaving files behind
+    if (dotPos != NULL)
+    {
+        char tmpFilename[dotPos - filename + 1];
+        memcpy(tmpFilename, filename, dotPos - filename);
+        tmpFilename[dotPos - filename] = '\0';
+        unlink(tmpFilename);
+    }
+    ret = unlink(filename);
+    return ret;
+}
 #endif
 
 // Overwrites the first instructions of some functions in the original binary with jumps to our wrappers instead
@@ -190,6 +207,7 @@ void write_jump_hooks()
 #ifdef IS_GCC
     uint32_t systemWrapperAddr = (uint32_t)&system_wrapper;
     uint32_t mktempWrapperAddr = (uint32_t)&mktemp_wrapper;
+    uint32_t unlinkWrapperAddr = (uint32_t)&unlink_wrapper;
 #endif
     uint32_t rel32 = mallocWrapperAddr - (uint32_t)mallocAddr - 5;
     // x86 jmp rel32
@@ -242,6 +260,16 @@ void write_jump_hooks()
     ((uint8_t*)mktempAddr)[2] = (rel32 >>  8) & 0xFF;
     ((uint8_t*)mktempAddr)[3] = (rel32 >> 16) & 0xFF;
     ((uint8_t*)mktempAddr)[4] = (rel32 >> 24) & 0xFF;
+    
+    rel32 = unlinkWrapperAddr - (uint32_t)unlinkAddr - 5;
+    // x86 jmp rel32
+    ((uint8_t*)unlinkAddr)[0] = 0xE9;
+
+    // jump offset
+    ((uint8_t*)unlinkAddr)[1] = (rel32 >>  0) & 0xFF;
+    ((uint8_t*)unlinkAddr)[2] = (rel32 >>  8) & 0xFF;
+    ((uint8_t*)unlinkAddr)[3] = (rel32 >> 16) & 0xFF;
+    ((uint8_t*)unlinkAddr)[4] = (rel32 >> 24) & 0xFF;
 #endif
 }
 

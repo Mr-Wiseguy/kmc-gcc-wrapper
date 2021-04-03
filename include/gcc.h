@@ -52,4 +52,5 @@ uintptr_t int21Addrs[] = {
 // Extra stuff for GCC specifically
 #define IS_GCC
 uintptr_t mktempAddr = 0x0100e088;
+uintptr_t unlinkAddr = 0x0100dd90;
 uintptr_t systemAddr = 0x0100e528;

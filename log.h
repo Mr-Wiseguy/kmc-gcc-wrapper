@@ -6,7 +6,7 @@
 extern FILE *logFile;
 
 #ifndef NDEBUG
-#define LOG_PRINT(...) fprintf(logFile, __VA_ARGS__)
+#define LOG_PRINT(...) fprintf(logFile, __VA_ARGS__); fflush(logFile);
 #else
 #define LOG_PRINT(...)
 #endif

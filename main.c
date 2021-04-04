@@ -72,11 +72,27 @@ void sig_handler(__attribute__((unused)) int signum, __attribute__((unused)) sig
            "    0x%08X 0x%08X 0x%08X 0x%08X\n"
            "    0x%08X 0x%08X 0x%08X 0x%08X\n"
            "    0x%08X 0x%08X 0x%08X 0x%08X\n"
+           "    0x%08X 0x%08X 0x%08X 0x%08X\n"
+           "    0x%08X 0x%08X 0x%08X 0x%08X\n"
+           "    0x%08X 0x%08X 0x%08X 0x%08X\n"
+           "    0x%08X 0x%08X 0x%08X 0x%08X\n"
+           "    0x%08X 0x%08X 0x%08X 0x%08X\n"
+           "    0x%08X 0x%08X 0x%08X 0x%08X\n"
+           "    0x%08X 0x%08X 0x%08X 0x%08X\n"
+           "    0x%08X 0x%08X 0x%08X 0x%08X\n"
            "    0x%08X 0x%08X 0x%08X 0x%08X\n",
            sp[0],  sp[1],  sp[2],  sp[3],
            sp[4],  sp[5],  sp[6],  sp[7],
            sp[8],  sp[9],  sp[10], sp[11],
-           sp[12], sp[13], sp[14], sp[15]);
+           sp[12], sp[13], sp[14], sp[15],
+           sp[16], sp[17], sp[18], sp[19],
+           sp[20], sp[21], sp[22], sp[23],
+           sp[24], sp[25], sp[26], sp[27],
+           sp[28], sp[29], sp[30], sp[31],
+           sp[32], sp[33], sp[34], sp[35],
+           sp[36], sp[37], sp[38], sp[39],
+           sp[40], sp[41], sp[42], sp[43],
+           sp[44], sp[45], sp[46], sp[47]);
 
     dos_21h_handler(&ctx);
 }
@@ -106,27 +122,7 @@ __attribute__((__cdecl__)) char *_unix2dosname_wrapper(char *in)
     return in; // That'll show em
 }
 
-#ifdef IS_GCC
-#define EXE_EXT_LEN 4 // length of ".exe"
-#define AT_LEN 1 // length of " @"
-
-// Changes gcc.exe to ./gcc
-void redirect_command(char *cmd)
-{
-    char *exePos = strstr(cmd, ".exe @");
-    if (exePos != NULL)
-    {
-        int offset = (exePos - cmd) / sizeof(char);
-        memmove(cmd + EXE_EXT_LEN + AT_LEN, cmd, offset);
-        cmd[0] = ' ';
-        cmd[1] = ' ';
-        cmd[2] = ' ';
-        cmd[3] = '.';
-        cmd[4] = '/';
-        cmd[offset + EXE_EXT_LEN + AT_LEN] = ' ';
-    }
-}
-
+#if defined(REDIRECT_SYSTEM) || defined(REDIRECT_SPAWNVPE)
 // TODO make this function instead escape the parenthesis in backslashes
 void replace_parens(char *str)
 {
@@ -149,9 +145,24 @@ char *build_call_string(__attribute__((unused))char *cmd, char *argv[])
     char **curArg = argv;
     int cmdLen = 3;
 
-    cmdString = malloc(strlen(programPath));
-    strcpy(cmdString, programPath);
-    cmdLen = strlen(programPath);
+    if (cmd[0] == 'c' && cmd[1] == 'p' && cmd[2] == 'p')
+    {
+        cmdString = malloc(strlen("mips-n64-") + 1);
+        strcpy(cmdString, "mips-n64-");
+        cmdLen = strlen("mips-n64-")  + 1;
+    }
+    // if (cmd[0] == 'l' && cmd[1] == 'd')
+    // {
+    //     cmdString = malloc(strlen("mips-n64-") + 1);
+    //     strcpy(cmdString, "mips-n64-");
+    //     cmdLen = strlen("mips-n64-")  + 1;
+    // }
+    else
+    {
+        cmdString = malloc(strlen(programPath) + 1);
+        strcpy(cmdString, programPath);
+        cmdLen = strlen(programPath) + 1;
+    }
     while (*curArg)
     {
         int curArgLen = strlen(*curArg);
@@ -162,21 +173,42 @@ char *build_call_string(__attribute__((unused))char *cmd, char *argv[])
         cmdLen += curArgLen + 1;
         curArg++;
     }
+    puts(cmdString);
 
     return cmdString;
 }
+#endif
 
+#ifdef REDIRECT_SYSTEM
 __attribute__((__cdecl__)) int system_wrapper(char *cmd, char *argv[])
 {
     int ret;
     char *callString = build_call_string(cmd, argv); 
+    LOG_PRINT("system: %s\n", cmd);
+    LOG_PRINT("  redirected: %s\n", callString);
     ret = system(callString);
     free(callString);
     return ret;
 }
+#endif
 
+#ifdef REDIRECT_SPAWNVPE
+__attribute__((__cdecl__)) int spawnvpe_wrapper(int mode, char *cmd, char *argv[], __attribute__((unused)) const char *const *envp)
+{
+    int ret;
+    char *callString = build_call_string(cmd, argv); 
+    LOG_PRINT("spawnvpe: %d %s\n", mode, cmd);
+    LOG_PRINT("  redirected: %s\n", callString);
+    ret = system(callString);
+    free(callString);
+    return ret;
+}
+#endif
+
+#ifdef IS_GCC
 __attribute__((__cdecl__)) int mktemp_wrapper(char *template)
 {
+    LOG_PRINT("mktemp %s\n", template);
     return mkstemp(template);
 }
 
@@ -204,10 +236,15 @@ void write_jump_hooks()
     uint32_t mallocWrapperAddr = (uint32_t)&malloc_wrapper;
     uint32_t reallocWrapperAddr = (uint32_t)&realloc_wrapper;
     uint32_t _unix2dosnameWrapperAddr = (uint32_t)&_unix2dosname_wrapper;
-#ifdef IS_GCC
+#ifdef REDIRECT_SYSTEM
     uint32_t systemWrapperAddr = (uint32_t)&system_wrapper;
+#endif
+#ifdef IS_GCC
     uint32_t mktempWrapperAddr = (uint32_t)&mktemp_wrapper;
     uint32_t unlinkWrapperAddr = (uint32_t)&unlink_wrapper;
+#endif
+#ifdef REDIRECT_SPAWNVPE
+    uint32_t spawnvpeWrapperAddr = (uint32_t)&spawnvpe_wrapper;
 #endif
     uint32_t rel32 = mallocWrapperAddr - (uint32_t)mallocAddr - 5;
     // x86 jmp rel32
@@ -239,8 +276,7 @@ void write_jump_hooks()
     ((uint8_t*)_unix2dosnameAddr)[3] = (rel32 >> 16) & 0xFF;
     ((uint8_t*)_unix2dosnameAddr)[4] = (rel32 >> 24) & 0xFF;
 
-#ifdef IS_GCC
-    
+#ifdef REDIRECT_SYSTEM
     rel32 = systemWrapperAddr - (uint32_t)systemAddr - 5;
     // x86 jmp rel32
     ((uint8_t*)systemAddr)[0] = 0xE9;
@@ -250,7 +286,9 @@ void write_jump_hooks()
     ((uint8_t*)systemAddr)[2] = (rel32 >>  8) & 0xFF;
     ((uint8_t*)systemAddr)[3] = (rel32 >> 16) & 0xFF;
     ((uint8_t*)systemAddr)[4] = (rel32 >> 24) & 0xFF;
+#endif
     
+#ifdef IS_GCC
     rel32 = mktempWrapperAddr - (uint32_t)mktempAddr - 5;
     // x86 jmp rel32
     ((uint8_t*)mktempAddr)[0] = 0xE9;
@@ -270,6 +308,18 @@ void write_jump_hooks()
     ((uint8_t*)unlinkAddr)[2] = (rel32 >>  8) & 0xFF;
     ((uint8_t*)unlinkAddr)[3] = (rel32 >> 16) & 0xFF;
     ((uint8_t*)unlinkAddr)[4] = (rel32 >> 24) & 0xFF;
+#endif
+
+#ifdef REDIRECT_SPAWNVPE
+    rel32 = spawnvpeWrapperAddr - (uint32_t)spawnvpeAddr - 5;
+    // x86 jmp rel32
+    ((uint8_t*)spawnvpeAddr)[0] = 0xE9;
+
+    // jump offset
+    ((uint8_t*)spawnvpeAddr)[1] = (rel32 >>  0) & 0xFF;
+    ((uint8_t*)spawnvpeAddr)[2] = (rel32 >>  8) & 0xFF;
+    ((uint8_t*)spawnvpeAddr)[3] = (rel32 >> 16) & 0xFF;
+    ((uint8_t*)spawnvpeAddr)[4] = (rel32 >> 24) & 0xFF;
 #endif
 }
 

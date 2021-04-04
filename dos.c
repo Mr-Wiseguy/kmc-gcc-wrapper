@@ -51,15 +51,21 @@ void replace_forwardslashes(char *input, int len)
     }
 }
 
+const char progsToReplace[] = "cc1.out as.out ld.out cpp.out mild.out";
+
 void remove_out_extension(char *input)
 {
-    char *outsubstr = strstr(input, ".out");
-    if (outsubstr != NULL)
+    // Remove the out extension only on specific programs that can be run
+    if (strstr(progsToReplace, input))
     {
-        outsubstr[0] = 0;
-        outsubstr[1] = 0;
-        outsubstr[2] = 0;
-        outsubstr[3] = 0;
+        char *outsubstr = strstr(input, ".out");
+        if (outsubstr != NULL)
+        {
+            outsubstr[0] = 0;
+            outsubstr[1] = 0;
+            outsubstr[2] = 0;
+            outsubstr[3] = 0;
+        }
     }
 }
 
@@ -79,7 +85,7 @@ void dos_open_file(context_t *ctx)
             modestr = "wb";
             break;
         case DOS_FILE_READWRITE:
-            modestr = "wb";
+            modestr = "rb+";
             break;
     }
     if (modestr == NULL)
@@ -332,7 +338,8 @@ void dos_file_attrib(context_t *ctx)
             break;
         case DOS_ATTRIB_SET:
             LOG_PRINT("  unimplemented\n");
-            exit(EXIT_FAILURE);
+            DOS_CLEAR_ERROR(ctx);
+            DOS_RETURN(ctx, 0x00); // TODO actually implement this
             break;
     }
     

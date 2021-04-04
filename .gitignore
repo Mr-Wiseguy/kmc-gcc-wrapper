@@ -8,4 +8,8 @@ as
 cc1
 cpp
 gcc
+mild
+makemask
+sgi2gas
+ld
 test/

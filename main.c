@@ -147,16 +147,10 @@ char *build_call_string(__attribute__((unused))char *cmd, char *argv[])
 
     if (cmd[0] == 'c' && cmd[1] == 'p' && cmd[2] == 'p')
     {
-        cmdString = malloc(strlen("mips-n64-") + 1);
-        strcpy(cmdString, "mips-n64-");
-        cmdLen = strlen("mips-n64-")  + 1;
+        cmdString = malloc(strlen("mips-linux-gnu-") + 1);
+        strcpy(cmdString, "mips-linux-gnu-");
+        cmdLen = strlen("mips-linux-gnu-")  + 1;
     }
-    // if (cmd[0] == 'l' && cmd[1] == 'd')
-    // {
-    //     cmdString = malloc(strlen("mips-n64-") + 1);
-    //     strcpy(cmdString, "mips-n64-");
-    //     cmdLen = strlen("mips-n64-")  + 1;
-    // }
     else
     {
         cmdString = malloc(strlen(programPath) + 1);

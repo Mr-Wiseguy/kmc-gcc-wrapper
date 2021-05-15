@@ -167,7 +167,7 @@ char *build_call_string(__attribute__((unused))char *cmd, char *argv[])
         cmdLen += curArgLen + 1;
         curArg++;
     }
-    puts(cmdString);
+    // puts(cmdString);
 
     return cmdString;
 }

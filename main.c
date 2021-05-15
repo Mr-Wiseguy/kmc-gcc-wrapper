@@ -187,7 +187,7 @@ __attribute__((__cdecl__)) int system_wrapper(char *cmd, char *argv[])
 #endif
 
 #ifdef REDIRECT_SPAWNVPE
-__attribute__((__cdecl__)) int spawnvpe_wrapper(int mode, char *cmd, char *argv[], __attribute__((unused)) const char *const *envp)
+__attribute__((__cdecl__)) int spawnvpe_wrapper(__attribute__((unused)) int mode, char *cmd, char *argv[], __attribute__((unused)) const char *const *envp)
 {
     int ret;
     char *callString = build_call_string(cmd, argv); 

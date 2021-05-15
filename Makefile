@@ -1,7 +1,7 @@
 OUT := wrapper
 SRCS := $(wildcard ./*.c)
 HEADERS := $(wildcard ./*.h)
-CFLAGS := -O3 -Wall -Wextra -Wpedantic -m32 -Iinclude
+CFLAGS := -O3 -Wall -Wextra -Wpedantic -m32 -Iinclude -DNDEBUG
 CC := gcc
 PROGRAMS := as cc1 cpp gcc mild makemask sgi2gas ld
 

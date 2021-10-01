@@ -397,6 +397,9 @@ int main(int argc, char* argv[])
     }
 
     // Overwrite the program's environ with the real one
+    #ifdef __APPLE__
+    extern char **environ;
+    #endif
     *(char***)environAddr = environ;
 
     // Write malloc/realloc jump hooks onto the program's ram

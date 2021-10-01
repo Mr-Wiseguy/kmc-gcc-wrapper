@@ -9,11 +9,14 @@
 #include <errno.h>
 #include <string.h>
 #include <signal.h>
-#include <malloc.h>
-#include <ucontext.h>
 #include <stdlib.h>
 #include "dos.h"
 #include "log.h"
+
+#ifdef __APPLE__
+#define _XOPEN_SOURCE 600
+#endif
+#include <ucontext.h>
 
 // Variable include
 #define INCLUDE_PROG() <PROG.h>
@@ -35,12 +38,21 @@ char *programPath;
 void sig_handler(__attribute__((unused)) int signum, __attribute__((unused)) siginfo_t *info, void *vcontext)
 {
     ucontext_t *context = (ucontext_t*)vcontext;
+    #ifdef __APPLE__
+    uint32_t *eax = (uint32_t *)&context->uc_mcontext->__ss.__eax;
+    uint32_t *ebx = (uint32_t *)&context->uc_mcontext->__ss.__ebx;
+    uint32_t *ecx = (uint32_t *)&context->uc_mcontext->__ss.__ecx;
+    uint32_t *edx = (uint32_t *)&context->uc_mcontext->__ss.__edx;
+    uint32_t *efl = (uint32_t *)&context->uc_mcontext->__ss.__eflags;
+    uint32_t *esi = (uint32_t *)&context->uc_mcontext->__ss.__esi;
+    #else
     uint32_t *eax = (uint32_t *)&context->uc_mcontext.gregs[REG_EAX];
     uint32_t *ebx = (uint32_t *)&context->uc_mcontext.gregs[REG_EBX];
     uint32_t *ecx = (uint32_t *)&context->uc_mcontext.gregs[REG_ECX];
     uint32_t *edx = (uint32_t *)&context->uc_mcontext.gregs[REG_EDX];
     uint32_t *efl = (uint32_t *)&context->uc_mcontext.gregs[REG_EFL];
     uint32_t *esi = (uint32_t *)&context->uc_mcontext.gregs[REG_ESI];
+    #endif
 #ifndef NDEBUG
     unsigned long ip = context->uc_mcontext.gregs[REG_EIP];
     unsigned long ds = context->uc_mcontext.gregs[REG_DS];
@@ -385,6 +397,9 @@ int main(int argc, char* argv[])
     }
 
     // Overwrite the program's environ with the real one
+    #ifdef __APPLE__
+    extern char **environ;
+    #endif
     *(char***)environAddr = environ;
 
     // Write malloc/realloc jump hooks onto the program's ram

@@ -9,7 +9,7 @@
 #include <errno.h>
 #include <string.h>
 #include <signal.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <ucontext.h>
 #include <stdlib.h>
 #include "dos.h"

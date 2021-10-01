@@ -39,12 +39,12 @@ void sig_handler(__attribute__((unused)) int signum, __attribute__((unused)) sig
 {
     ucontext_t *context = (ucontext_t*)vcontext;
     #ifdef __APPLE__
-    uint32_t *eax = (uint32_t *)&context->uc_mcontext->__ss.eax;
-    uint32_t *ebx = (uint32_t *)&context->uc_mcontext->__ss.ebx;
-    uint32_t *ecx = (uint32_t *)&context->uc_mcontext->__ss.ecx;
-    uint32_t *edx = (uint32_t *)&context->uc_mcontext->__ss.edx;
+    uint32_t *eax = (uint32_t *)&context->uc_mcontext->__ss.__eax;
+    uint32_t *ebx = (uint32_t *)&context->uc_mcontext->__ss.__ebx;
+    uint32_t *ecx = (uint32_t *)&context->uc_mcontext->__ss.__ecx;
+    uint32_t *edx = (uint32_t *)&context->uc_mcontext->__ss.__edx;
     uint32_t *efl = (uint32_t *)&context->uc_mcontext->__ss.__eflags;
-    uint32_t *esi = (uint32_t *)&context->uc_mcontext->__ss.esi;
+    uint32_t *esi = (uint32_t *)&context->uc_mcontext->__ss.__esi;
     #else
     uint32_t *eax = (uint32_t *)&context->uc_mcontext.gregs[REG_EAX];
     uint32_t *ebx = (uint32_t *)&context->uc_mcontext.gregs[REG_EBX];

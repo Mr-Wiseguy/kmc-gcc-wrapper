@@ -23,6 +23,7 @@ jobs:
       - name: Make
         shell: bash
         run: |
+          export _XOPEN_SOURCE=y
           make
       - name: Create release archive
         shell: bash

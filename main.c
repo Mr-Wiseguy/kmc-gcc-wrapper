@@ -13,8 +13,9 @@
 #include "dos.h"
 #include "log.h"
 
-// For Darwin
+#ifdef __APPLE__
 #define _XOPEN_SOURCE 600
+#endif
 #include <ucontext.h>
 
 // Variable include

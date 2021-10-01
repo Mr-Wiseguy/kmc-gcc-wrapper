@@ -10,10 +10,12 @@
 #include <string.h>
 #include <signal.h>
 #include <stdlib.h>
-#include <ucontext.h>
-#include <stdlib.h>
 #include "dos.h"
 #include "log.h"
+
+// For Darwin
+#define _XOPEN_SOURCE 600
+#include <ucontext.h>
 
 // Variable include
 #define INCLUDE_PROG() <PROG.h>

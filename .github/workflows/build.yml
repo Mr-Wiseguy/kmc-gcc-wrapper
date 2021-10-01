@@ -28,16 +28,16 @@ jobs:
       - name: Create release archive
         shell: bash
         run: |
-          tar -czvf wrapped-kmc-gcc-${{ matrix.os }}.tar.gz as cc1 cpp gcc mild makemask sgi2gas ld
+          tar -czvf kmc-gcc-wrapper-${{ matrix.os }}.tar.gz as cc1 cpp gcc mild makemask sgi2gas ld
       - name: Upload archive
         uses: actions/upload-artifact@v2
         with:
-          name: wrapped-kmc-gcc-${{ matrix.os }}
+          name:  kmc-gcc-wrapper-${{ matrix.os }}
           path: |
-            wrapped-kmc-gcc-${{ matrix.os }}.tar.gz
+             kmc-gcc-wrapper-${{ matrix.os }}.tar.gz
       - name: Update release
         uses: johnwbyrd/update-release@v1.0.0
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          files: wrapped-kmc-gcc-${{ matrix.os }}.tar.gz
+          files:  kmc-gcc-wrapper-${{ matrix.os }}.tar.gz

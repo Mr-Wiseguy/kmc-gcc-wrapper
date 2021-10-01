@@ -38,12 +38,21 @@ char *programPath;
 void sig_handler(__attribute__((unused)) int signum, __attribute__((unused)) siginfo_t *info, void *vcontext)
 {
     ucontext_t *context = (ucontext_t*)vcontext;
+    #ifdef __APPLE__
+    uint32_t *eax = (uint32_t *)&context->uc_mcontext->__ss.eax;
+    uint32_t *ebx = (uint32_t *)&context->uc_mcontext->__ss.ebx;
+    uint32_t *ecx = (uint32_t *)&context->uc_mcontext->__ss.ecx;
+    uint32_t *edx = (uint32_t *)&context->uc_mcontext->__ss.edx;
+    uint32_t *efl = (uint32_t *)&context->uc_mcontext->__ss.__eflags;
+    uint32_t *esi = (uint32_t *)&context->uc_mcontext->__ss.esi;
+    #else
     uint32_t *eax = (uint32_t *)&context->uc_mcontext.gregs[REG_EAX];
     uint32_t *ebx = (uint32_t *)&context->uc_mcontext.gregs[REG_EBX];
     uint32_t *ecx = (uint32_t *)&context->uc_mcontext.gregs[REG_ECX];
     uint32_t *edx = (uint32_t *)&context->uc_mcontext.gregs[REG_EDX];
     uint32_t *efl = (uint32_t *)&context->uc_mcontext.gregs[REG_EFL];
     uint32_t *esi = (uint32_t *)&context->uc_mcontext.gregs[REG_ESI];
+    #endif
 #ifndef NDEBUG
     unsigned long ip = context->uc_mcontext.gregs[REG_EIP];
     unsigned long ds = context->uc_mcontext.gregs[REG_DS];

@@ -22,7 +22,7 @@
 #define INCLUDE_PROG() <PROG.h>
 #include INCLUDE_PROG()
 
-typedef __attribute__((__cdecl__)) void (func_t)();
+typedef __attribute__((__cdecl__)) int (func_t)();
 typedef __attribute__((__cdecl__)) const char* (getenv_t)(const char*);
 
 
@@ -185,6 +185,13 @@ char *build_call_string(__attribute__((unused))char *cmd, char *argv[])
 }
 #endif
 
+#ifdef IS_GCC
+#include <limits.h>
+// Buffer to hold the filename returned by mkstemp
+// This will get freed when system returns error, to prevent temp files from lingering
+char temp_file_buf[PATH_MAX] = {0};
+#endif
+
 #ifdef REDIRECT_SYSTEM
 __attribute__((__cdecl__)) int system_wrapper(char *cmd, char *argv[])
 {
@@ -194,7 +201,28 @@ __attribute__((__cdecl__)) int system_wrapper(char *cmd, char *argv[])
     LOG_PRINT("  redirected: %s\n", callString);
     ret = system(callString);
     free(callString);
-    return ret;
+    if (ret != 0)
+    {
+#ifdef IS_GCC
+        if (strlen(temp_file_buf) > 0)
+        {
+            // Manually unlink every possible temp file that gcc creates, since if system returns nonzero
+            // kmc gcc exits without always unlinking these files.
+            // This prevents temp files from being left around after kmc gcc exits.
+            char buf[PATH_MAX + 2];
+            sprintf(buf, "%s.i", temp_file_buf);
+            unlink(buf);
+            sprintf(buf, "%s.s", temp_file_buf);
+            unlink(buf);
+            sprintf(buf, "%s.o", temp_file_buf);
+            unlink(buf);
+        }
+#endif
+        // kmc gcc doesn't return an exit code correctly if system returns an error code other than 1,
+        // so always return 1 in the case of an error from system here.
+        return 1;
+    }
+    return 0;
 }
 #endif
 
@@ -215,24 +243,19 @@ __attribute__((__cdecl__)) int spawnvpe_wrapper(__attribute__((unused)) int mode
 __attribute__((__cdecl__)) int mktemp_wrapper(char *template)
 {
     LOG_PRINT("mktemp %s\n", template);
-    return mkstemp(template);
+    int ret = mkstemp(template);
+    // kmc gcc never unlinks the direct output of mkstemp, so we'll do that ourselves here
+    unlink(template);
+    // Record the temp filename for use later in system, since kmc gcc doesn't always unlink intermediate files
+    // if system returns nonzero.
+    strncpy(temp_file_buf, template, PATH_MAX);
+
+    return ret;
 }
 
-__attribute__((__cdecl__)) int unlink_wrapper(char *filename)
+__attribute__((__cdecl__)) int unlink_wrapper(__attribute__((unused)) char *filename)
 {
-    char *dotPos = strrchr(filename, '.');
-    int ret;
-    // Run unlink twice if there's an extension in the filename
-    // Why does this need to be done? Who knows, but it fixes leaving files behind
-    if (dotPos != NULL)
-    {
-        char tmpFilename[dotPos - filename + 1];
-        memcpy(tmpFilename, filename, dotPos - filename);
-        tmpFilename[dotPos - filename] = '\0';
-        unlink(tmpFilename);
-    }
-    ret = unlink(filename);
-    return ret;
+    return unlink(filename);
 }
 #endif
 
@@ -414,9 +437,9 @@ int main(int argc, char* argv[])
 #endif
 
     // Call the program's main function
-    binStart(argc, argv);
+    int ret = binStart(argc, argv);
 
     free(programPath);
 
-    return EXIT_SUCCESS;
+    return ret;
 }

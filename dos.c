@@ -472,7 +472,10 @@ FILE *logFile;
 void dos_init(void)
 {
 #ifndef NDEBUG
-    logFile = fopen("log.txt", "w");
+    extern const char *__progname;
+    char logFilename[32];
+    snprintf(logFilename, 32, "log_%s.txt", __progname);
+    logFile = fopen(logFilename, "w");
 #endif
     memset(fileHandles, 0, sizeof(fileHandles));
     fileHandles[0] = stdin;

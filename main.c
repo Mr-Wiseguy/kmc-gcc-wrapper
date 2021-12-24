@@ -22,7 +22,7 @@
 #define INCLUDE_PROG() <PROG.h>
 #include INCLUDE_PROG()
 
-typedef __attribute__((__cdecl__)) int (func_t)();
+typedef __attribute__((__cdecl__)) void (func_t)();
 typedef __attribute__((__cdecl__)) const char* (getenv_t)(const char*);
 
 
@@ -185,41 +185,6 @@ char *build_call_string(__attribute__((unused))char *cmd, char *argv[])
 }
 #endif
 
-#ifdef IS_GCC
-#include <limits.h>
-// Buffer to hold the filename returned by mkstemp
-// This will get freed when system returns error, to prevent temp files from lingering
-#define MAX_TEMP_FILES 6 // should be plenty, gcc should just have a .s, .i, .o at max so add a couple extra to be safe
-char *temp_file_buf[MAX_TEMP_FILES] = {0};
-int temp_files_made = 0;
-void unlink_gcc_files()
-{
-    for (int i = 0; i < temp_files_made; i++)
-    {
-        const char *cur_temp_file = temp_file_buf[i];
-        if (cur_temp_file != NULL)
-        {
-            // Manually unlink every possible temp file that gcc creates, since if system returns nonzero
-            // kmc gcc exits without always unlinking these files.
-            // This prevents temp files from being left around after kmc gcc exits.
-            char buf[PATH_MAX + 2];
-            snprintf(buf, PATH_MAX + 2, "%s.i", cur_temp_file);
-            unlink(buf);
-            snprintf(buf, PATH_MAX + 2, "%s.s", cur_temp_file);
-            unlink(buf);
-            snprintf(buf, PATH_MAX + 2, "%s.o", cur_temp_file);
-            unlink(buf);
-        }
-    }
-}
-
-__attribute__((__cdecl__)) int exit_wrapper(int code)
-{
-    unlink_gcc_files();
-    exit(code);
-}
-#endif
-
 #ifdef REDIRECT_SYSTEM
 __attribute__((__cdecl__)) int system_wrapper(char *cmd, char *argv[])
 {
@@ -229,13 +194,7 @@ __attribute__((__cdecl__)) int system_wrapper(char *cmd, char *argv[])
     LOG_PRINT("  redirected: %s\n", callString);
     ret = system(callString);
     free(callString);
-    if (ret != 0)
-    {
-        // kmc gcc doesn't return an exit code correctly if system returns an error code other than 1,
-        // so always return 1 in the case of an error from system here.
-        return 1;
-    }
-    return 0;
+    return ret;
 }
 #endif
 
@@ -257,20 +216,35 @@ __attribute__((__cdecl__)) int mktemp_wrapper(char *template)
 {
     LOG_PRINT("mktemp %s\n", template);
     int ret = mkstemp(template);
-    // kmc gcc never unlinks the direct output of mkstemp, so we'll do that ourselves here
     unlink(template);
-    // Record the temp filename for use later in system, since kmc gcc doesn't always unlink intermediate files
-    // if system returns nonzero.
-    temp_file_buf[temp_files_made] = calloc(PATH_MAX, sizeof(char)); // Use calloc to zero-initialize output
-    strncpy(temp_file_buf[temp_files_made], template, PATH_MAX - 1);
-    temp_files_made++;
-
     return ret;
 }
 
-__attribute__((__cdecl__)) int unlink_wrapper(__attribute__((unused)) char *filename)
+__attribute__((__cdecl__)) int unlink_wrapper(char *filename)
 {
-    return unlink(filename);
+    LOG_PRINT("unlink %s\n", filename);
+    char *dotPos = strrchr(filename, '.');
+    int ret;
+    // Run unlink twice if there's an extension in the filename
+    // Why does this need to be done? Who knows, but it fixes leaving files behind
+    if (dotPos != NULL)
+    {
+        char tmpFilename[dotPos - filename + 3];
+        memcpy(tmpFilename, filename, dotPos - filename);
+        tmpFilename[dotPos - filename] = '\0'; 
+        unlink(tmpFilename);
+        // This forces cleanup of the tmp files, as kmc gcc doesn't seem to like cleaning up after itself properly
+        tmpFilename[dotPos - filename + 0] = '.';
+        tmpFilename[dotPos - filename + 1] = 's';
+        tmpFilename[dotPos - filename + 2] = '\0';
+        unlink(tmpFilename);
+        tmpFilename[dotPos - filename + 0] = '.';
+        tmpFilename[dotPos - filename + 1] = 'i';
+        tmpFilename[dotPos - filename + 2] = '\0';
+        unlink(tmpFilename);
+    }
+    ret = unlink(filename);
+    return ret;
 }
 #endif
 
@@ -286,7 +260,6 @@ void write_jump_hooks()
 #ifdef IS_GCC
     uint32_t mktempWrapperAddr = (uint32_t)&mktemp_wrapper;
     uint32_t unlinkWrapperAddr = (uint32_t)&unlink_wrapper;
-    uint32_t exitWrapperAddr = (uint32_t)&exit_wrapper;
 #endif
 #ifdef REDIRECT_SPAWNVPE
     uint32_t spawnvpeWrapperAddr = (uint32_t)&spawnvpe_wrapper;
@@ -353,16 +326,6 @@ void write_jump_hooks()
     ((uint8_t*)unlinkAddr)[2] = (rel32 >>  8) & 0xFF;
     ((uint8_t*)unlinkAddr)[3] = (rel32 >> 16) & 0xFF;
     ((uint8_t*)unlinkAddr)[4] = (rel32 >> 24) & 0xFF;
-
-    rel32 = exitWrapperAddr - (uint32_t)exitAddr - 5;
-    // x86 jmp rel32
-    ((uint8_t*)exitAddr)[0] = 0xE9;
-
-    // jump offset
-    ((uint8_t*)exitAddr)[1] = (rel32 >>  0) & 0xFF;
-    ((uint8_t*)exitAddr)[2] = (rel32 >>  8) & 0xFF;
-    ((uint8_t*)exitAddr)[3] = (rel32 >> 16) & 0xFF;
-    ((uint8_t*)exitAddr)[4] = (rel32 >> 24) & 0xFF;
 #endif
 
 #ifdef REDIRECT_SPAWNVPE
@@ -463,14 +426,9 @@ int main(int argc, char* argv[])
 #endif
 
     // Call the program's main function
-    int ret = binStart(argc, argv);
+    binStart(argc, argv);
 
-#ifdef IS_GCC
-    unlink_gcc_files();
-#endif
-
-    printf("done\n");
     free(programPath);
 
-    return ret;
+    return EXIT_SUCCESS;
 }
